@@ -1,0 +1,820 @@
+openapi: 3.0.3
+info:
+  title: OpenBao Vault Service API
+  description: App-scoped secret, symmetric HMAC-key, asymmetric-key, and administration APIs.
+  version: 1.0.0
+
+tags:
+  - name: Controls
+    description: Authentication and administrator controls
+  - name: secrets
+    description: App-scoped KV v2 secrets
+  - name: symmetric-key
+    description: symmetric-key or HMAC key provisioning and expiry-aware rotation
+  - name: asymmetric-key
+    description: Asymmetric key pairs and rotation
+
+servers:
+  - url: http://localhost:8080
+    description: Local development environment's base url
+
+paths:
+  /actuator/health:
+    get:
+      summary: Read application health
+      operationId: getHealth
+      tags: [Controls]
+      responses:
+        '200':
+          description: Health summary without component details
+          content:
+            application/vnd.spring-boot.actuator.v3+json:
+              schema: { type: object, additionalProperties: true }
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        default: { $ref: '#/components/responses/ApiError' }
+  /actuator/info:
+    get:
+      tags: [Controls]
+      operationId: getApplicationInfo
+      summary: Read application information
+      responses:
+        '200':
+          description: Application information
+          content:
+            application/vnd.spring-boot.actuator.v3+json:
+              schema: { type: object, additionalProperties: true }
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        default: { $ref: '#/components/responses/ApiError' }
+  /api/auth/token:
+    post:
+      tags: [Controls]
+      operationId: issueAppToken
+      summary: Exchange app credentials for an API token
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TokenRequest' }
+      responses:
+        '200':
+          description: Bearer token issued
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TokenResponse' }
+        default: { $ref: '#/components/responses/ApiError' }
+  /api/auth/admin-token:
+    post:
+      tags: [Controls]
+      operationId: issueAdminToken
+      summary: Exchange administrator credentials for an admin token
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AdminLoginRequest' }
+      responses:
+        '200':
+          description: Bearer token issued
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TokenResponse' }
+        default: { $ref: '#/components/responses/ApiError' }
+  /api/v1/admin/namespaces:
+    get:
+      tags: [Controls]
+      operationId: listNamespaces
+      summary: List namespaces
+      responses:
+        '200':
+          description: Namespace listing from OpenBao
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        default: { $ref: '#/components/responses/ApiError' }
+    post:
+      tags: [Controls]
+      operationId: createNamespace
+      summary: Create a namespace
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/NamespaceRequest' }
+      responses:
+        '200':
+          description: Namespace created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminResourceResponse' }
+        default: { $ref: '#/components/responses/ApiError' }
+  /api/v1/admin/identities:
+    get:
+      tags: [Controls]
+      operationId: listIntegrationIdentities
+      summary: List managed integration identities
+      responses:
+        '200':
+          description: Identities without client credentials
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/IntegrationIdentityResponse' }
+        default: { $ref: '#/components/responses/ApiError' }
+  /api/v1/admin/identities/{id}:
+    parameters:
+      - { $ref: '#/components/parameters/IdentityId' }
+    post:
+      tags: [Controls]
+      operationId: createIntegrationIdentity
+      summary: Create an integration identity
+      description: Returns the generated client secret once. Store it securely.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/IntegrationIdentityRequest' }
+      responses:
+        '200':
+          description: Identity created; response is not cacheable
+          headers:
+            Cache-Control: { schema: { type: string, example: no-store } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/IntegrationIdentityResponse' }
+        default: { $ref: '#/components/responses/ApiError' }
+    get:
+      tags: [Controls]
+      operationId: getIntegrationIdentity
+      summary: Read an integration identity
+      responses:
+        '200':
+          description: Identity without its client credential
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/IntegrationIdentityResponse' }
+        default: { $ref: '#/components/responses/ApiError' }
+    put:
+      tags: [Controls]
+      operationId: updateIntegrationIdentity
+      summary: Replace an identity's policy assignment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/IntegrationIdentityRequest' }
+      responses:
+        '200':
+          description: Policy assignment updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/IntegrationIdentityResponse' }
+        default: { $ref: '#/components/responses/ApiError' }
+    delete:
+      tags: [Controls]
+      operationId: deleteIntegrationIdentity
+      summary: Delete an integration identity and revoke its token
+      responses:
+        '204': { description: Identity deleted }
+        default: { $ref: '#/components/responses/ApiError' }
+  /api/v1/admin/identities/{id}/disable:
+    post:
+      tags: [Controls]
+      operationId: disableIntegrationIdentity
+      summary: Disable an integration identity and revoke its token
+      parameters: [ { $ref: '#/components/parameters/IdentityId' } ]
+      responses:
+        '200':
+          description: Identity disabled
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/IntegrationIdentityResponse' }
+        default: { $ref: '#/components/responses/ApiError' }
+  /api/v1/admin/identities/{id}/enable:
+    post:
+      tags: [Controls]
+      operationId: enableIntegrationIdentity
+      summary: Enable an integration identity
+      parameters: [ { $ref: '#/components/parameters/IdentityId' } ]
+      responses:
+        '200':
+          description: Identity enabled
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/IntegrationIdentityResponse' }
+        default: { $ref: '#/components/responses/ApiError' }
+  /api/v1/admin/identities/{id}/rotate-secret:
+    post:
+      tags: [Controls]
+      operationId: rotateIntegrationCredential
+      summary: Rotate an integration identity credential
+      description: Returns the replacement client secret once.
+      parameters: [ { $ref: '#/components/parameters/IdentityId' } ]
+      responses:
+        '200':
+          description: Credential rotated; response is not cacheable
+          headers:
+            Cache-Control: { schema: { type: string, example: no-store } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/IntegrationIdentityResponse' }
+        default: { $ref: '#/components/responses/ApiError' }
+  /api/v1/admin/policies:
+    put:
+      tags: [Controls]
+      operationId: savePolicy
+      summary: Create or replace a namespace ACL policy
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PolicyRequest' }
+      responses:
+        '200':
+          description: Policy saved
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminResourceResponse' }
+        default: { $ref: '#/components/responses/ApiError' }
+    get:
+      tags: [Controls]
+      operationId: getPolicy
+      summary: Read a namespace ACL policy
+      parameters:
+        - { $ref: '#/components/parameters/NamespaceQuery' }
+        - { $ref: '#/components/parameters/NameQuery' }
+      responses:
+        '200':
+          description: Policy returned by OpenBao
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        default: { $ref: '#/components/responses/ApiError' }
+    delete:
+      tags: [Controls]
+      operationId: deletePolicy
+      summary: Delete a namespace ACL policy
+      parameters:
+        - { $ref: '#/components/parameters/NamespaceQuery' }
+        - { $ref: '#/components/parameters/NameQuery' }
+      responses:
+        '204': { description: Policy deleted }
+        default: { $ref: '#/components/responses/ApiError' }
+  /api/v1/admin/policies/list:
+    get:
+      tags: [Controls]
+      operationId: listPolicies
+      summary: List policy names in a namespace
+      parameters: [ { $ref: '#/components/parameters/NamespaceQuery' } ]
+      responses:
+        '200':
+          description: Policy names returned by OpenBao
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        default: { $ref: '#/components/responses/ApiError' }
+  /api/v1/admin/roles:
+    put:
+      tags: [Controls]
+      operationId: saveTokenRole
+      summary: Create or replace a token role
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TokenRoleRequest' }
+      responses:
+        '200':
+          description: Role saved
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminResourceResponse' }
+        default: { $ref: '#/components/responses/ApiError' }
+    get:
+      tags: [Controls]
+      operationId: getTokenRole
+      summary: Read a token role
+      parameters:
+        - { $ref: '#/components/parameters/NamespaceQuery' }
+        - { $ref: '#/components/parameters/NameQuery' }
+      responses:
+        '200':
+          description: Token role returned by OpenBao
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        default: { $ref: '#/components/responses/ApiError' }
+    delete:
+      tags: [Controls]
+      operationId: deleteTokenRole
+      summary: Delete a token role
+      parameters:
+        - { $ref: '#/components/parameters/NamespaceQuery' }
+        - { $ref: '#/components/parameters/NameQuery' }
+      responses:
+        '204': { description: Token role deleted }
+        default: { $ref: '#/components/responses/ApiError' }
+  /api/v1/admin/roles/list:
+    get:
+      tags: [Controls]
+      operationId: listTokenRoles
+      summary: List token role names in a namespace
+      parameters: [ { $ref: '#/components/parameters/NamespaceQuery' } ]
+      responses:
+        '200':
+          description: Role names returned by OpenBao
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        default: { $ref: '#/components/responses/ApiError' }
+  /api/v1/secrets/{name}:
+    parameters:
+      - name: name
+        in: path
+        required: true
+        description: Secret name, such as a bank iCode
+        schema: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$' }
+    get:
+      tags: [secrets]
+      operationId: readSecret
+      summary: Read a named secret
+      responses:
+        '200':
+          description: Secret JSON and KV v2 version
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SecretReadResponse' }
+        default: { $ref: '#/components/responses/ApiError' }
+    put:
+      tags: [secrets]
+      operationId: writeSecret
+      summary: Replace a named secret
+      description: Each write replaces the complete JSON object and advances only this name's KV v2 version.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SecretWriteRequest' }
+      responses:
+        '200':
+          description: Secret stored
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SecretWriteResponse' }
+        default: { $ref: '#/components/responses/ApiError' }
+    delete:
+      tags: [secrets]
+      operationId: deleteSecret
+      summary: Permanently delete a secret and all its versions
+      responses:
+        '204': { description: Secret deleted }
+        default: { $ref: '#/components/responses/ApiError' }
+  /api/v1/symmetric-keys/{alias}:
+    post:
+      tags: [symmetric-key]
+      operationId: requestSymmetricKey
+      summary: Create or retrieve the active HMAC signing key
+      description: A request at or after refreshAt stages and activates a replacement when expiration is enabled.
+      parameters: [ { $ref: '#/components/parameters/SymmetricAlias' } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SymmetricKeyRequest' }
+      responses:
+        '200':
+          description: Active HMAC key returned; response is not cacheable
+          headers:
+            Cache-Control: { schema: { type: string, example: 'no-store, max-age=0' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SymmetricKeyResponse' }
+        default: { $ref: '#/components/responses/ApiError' }
+  /api/v1/symmetric-keys/{alias}/versions/{keyId}:
+    get:
+      tags: [symmetric-key]
+      operationId: getSymmetricKeyVersion
+      summary: Retrieve a key version for verification before expiry
+      description: Anyone receiving the raw HMAC key can also sign with it. Clients must enforce expiresAt for locally held key material.
+      parameters:
+        - { $ref: '#/components/parameters/SymmetricAlias' }
+        - { $ref: '#/components/parameters/KeyId' }
+      responses:
+        '200':
+          description: Key version returned; response is not cacheable
+          headers:
+            Cache-Control: { schema: { type: string, example: 'no-store, max-age=0' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SymmetricKeyResponse' }
+        '410': { $ref: '#/components/responses/KeyExpired' }
+        default: { $ref: '#/components/responses/ApiError' }
+  /api/v1/keys/types:
+    get:
+      tags: [asymmetric-key]
+      operationId: listAsymmetricKeyTypes
+      summary: List configured asymmetric key types
+      responses:
+        '200':
+          description: Supported types
+          content:
+            application/json:
+              schema: { type: array, items: { type: string } }
+        default: { $ref: '#/components/responses/ApiError' }
+  /api/v1/keys/{name}:
+    parameters: [ { $ref: '#/components/parameters/KeyAlias' } ]
+    post:
+      tags: [asymmetric-key]
+      operationId: getOrCreateAsymmetricKeyPair
+      summary: Create or retrieve the active asymmetric key pair
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/KeyPairRequest' }
+      responses:
+        '200':
+          description: Key pair returned; response is not cacheable
+          headers:
+            Cache-Control: { schema: { type: string, example: 'no-store, max-age=0' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/KeyResponse' }
+        default: { $ref: '#/components/responses/ApiError' }
+    delete:
+      tags: [asymmetric-key]
+      operationId: deleteAsymmetricKeyPair
+      summary: Delete a key-pair alias and its Transit keys
+      responses:
+        '204': { description: Key pair deleted }
+        default: { $ref: '#/components/responses/ApiError' }
+  /api/v1/keys/{name}/key-pair:
+    get:
+      tags: [asymmetric-key]
+      operationId: getActiveAsymmetricKeyPair
+      summary: Retrieve the active key pair
+      parameters: [ { $ref: '#/components/parameters/KeyAlias' } ]
+      responses:
+        '200':
+          description: Active key pair returned; response is not cacheable
+          headers:
+            Cache-Control: { schema: { type: string, example: 'no-store, max-age=0' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/KeyResponse' }
+        default: { $ref: '#/components/responses/ApiError' }
+  /api/v1/keys/{name}/rotation-policy:
+    parameters: [ { $ref: '#/components/parameters/KeyAlias' } ]
+    get:
+      tags: [asymmetric-key]
+      operationId: getAsymmetricRotationPolicy
+      summary: Read the rotation policy
+      responses:
+        '200':
+          description: Rotation policy
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PolicyResponse' }
+        default: { $ref: '#/components/responses/ApiError' }
+    put:
+      tags: [asymmetric-key]
+      operationId: updateAsymmetricRotationPolicy
+      summary: Configure the rotation policy
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RotationPolicyRequest' }
+      responses:
+        '200':
+          description: Updated rotation policy
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PolicyResponse' }
+        default: { $ref: '#/components/responses/ApiError' }
+  /api/v1/keys/{name}/rotation-policy/run:
+    post:
+      tags: [asymmetric-key]
+      operationId: runAsymmetricRotationPolicy
+      summary: Run a due key rotation
+      parameters: [ { $ref: '#/components/parameters/KeyAlias' } ]
+      responses:
+        '200':
+          description: Rotation result
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RotationRunResponse' }
+        default: { $ref: '#/components/responses/ApiError' }
+  /api/v1/keys/{name}/emergency-rotation:
+    post:
+      tags: [asymmetric-key]
+      operationId: emergencyRotateAsymmetricKey
+      summary: Immediately rotate an asymmetric key
+      description: App callers may omit the body; a rotation operator supplies targetAppId.
+      parameters: [ { $ref: '#/components/parameters/KeyAlias' } ]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EmergencyRotationRequest' }
+      responses:
+        '200':
+          description: Emergency rotation result
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RotationRunResponse' }
+        default: { $ref: '#/components/responses/ApiError' }
+  /api/v1/keys/{name}/rotations:
+    post:
+      tags: [asymmetric-key]
+      operationId: stageAsymmetricRotation
+      summary: Stage a replacement key pair
+      parameters: [ { $ref: '#/components/parameters/KeyAlias' } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/KeyPairRequest' }
+      responses:
+        '200':
+          description: Pending key pair returned; response is not cacheable
+          headers:
+            Cache-Control: { schema: { type: string, example: 'no-store, max-age=0' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/KeyResponse' }
+        default: { $ref: '#/components/responses/ApiError' }
+  /api/v1/keys/{name}/rotations/{keyId}:
+    parameters:
+      - { $ref: '#/components/parameters/KeyAlias' }
+      - { $ref: '#/components/parameters/KeyId' }
+    get:
+      tags: [asymmetric-key]
+      operationId: getPendingAsymmetricKey
+      summary: Read a pending key pair
+      responses:
+        '200':
+          description: Pending key pair returned; response is not cacheable
+          headers:
+            Cache-Control: { schema: { type: string, example: 'no-store, max-age=0' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/KeyResponse' }
+        default: { $ref: '#/components/responses/ApiError' }
+    delete:
+      tags: [asymmetric-key]
+      operationId: cancelAsymmetricRotation
+      summary: Cancel a pending key rotation
+      responses:
+        '204': { description: Pending rotation canceled }
+        default: { $ref: '#/components/responses/ApiError' }
+  /api/v1/keys/{name}/rotations/{keyId}/activate:
+    post:
+      tags: [asymmetric-key]
+      operationId: activateAsymmetricRotation
+      summary: Activate a pending key pair
+      parameters:
+        - { $ref: '#/components/parameters/KeyAlias' }
+        - { $ref: '#/components/parameters/KeyId' }
+      responses:
+        '200':
+          description: Key activated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RotationStatusResponse' }
+        default: { $ref: '#/components/responses/ApiError' }
+  /api/v1/keys/{name}/public-keys:
+    get:
+      tags: [asymmetric-key]
+      operationId: getAsymmetricPublicKeys
+      summary: List public keys and their rotation states
+      parameters: [ { $ref: '#/components/parameters/KeyAlias' } ]
+      responses:
+        '200':
+          description: Public key history
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/PublicKeyEntry' }
+        default: { $ref: '#/components/responses/ApiError' }
+  /api/v1/keys/{name}/public-keys/{keyId}:
+    delete:
+      tags: [asymmetric-key]
+      operationId: revokeAsymmetricPublicKey
+      summary: Revoke a prior public key
+      parameters:
+        - { $ref: '#/components/parameters/KeyAlias' }
+        - { $ref: '#/components/parameters/KeyId' }
+      responses:
+        '204': { description: Public key revoked }
+        default: { $ref: '#/components/responses/ApiError' }
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    IdentityId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,58}$' }
+    KeyAlias:
+      name: name
+      in: path
+      required: true
+      schema: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$' }
+    SymmetricAlias:
+      name: alias
+      in: path
+      required: true
+      schema: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$' }
+    KeyId:
+      name: keyId
+      in: path
+      required: true
+      schema: { type: string, pattern: '^v[1-9][0-9]{0,8}$' }
+    NamespaceQuery:
+      name: namespace
+      in: query
+      required: true
+      schema: { type: string }
+    NameQuery:
+      name: name
+      in: query
+      required: true
+      schema: { type: string }
+  responses:
+    ApiError:
+      description: API or OpenBao operation error
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ApiErrorResponse' }
+    KeyExpired:
+      description: Symmetric key version expired and is no longer served
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ApiErrorResponse' }
+  schemas:
+    TokenRequest:
+      type: object
+      required: [clientId, clientSecret]
+      properties:
+        clientId: { type: string }
+        clientSecret: { type: string, format: password }
+    AdminLoginRequest:
+      type: object
+      required: [username, password]
+      properties:
+        username: { type: string }
+        password: { type: string, format: password }
+    TokenResponse:
+      type: object
+      required: [accessToken, tokenType, expiresIn]
+      properties:
+        accessToken: { type: string }
+        tokenType: { type: string, example: Bearer }
+        expiresIn: { type: integer, format: int64, description: Token lifetime in seconds }
+    NamespaceRequest:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string }
+        parent: { type: string, nullable: true }
+    PolicyRequest:
+      type: object
+      required: [namespace, name, policy]
+      properties:
+        namespace: { type: string }
+        name: { type: string }
+        policy: { type: string, description: OpenBao ACL HCL }
+    TokenRoleRequest:
+      type: object
+      required: [namespace, name, allowedPolicies, period]
+      properties:
+        namespace: { type: string }
+        name: { type: string }
+        allowedPolicies: { type: array, minItems: 1, items: { type: string } }
+        period: { type: string, example: 24h }
+        orphan: { type: boolean }
+    IntegrationIdentityRequest:
+      type: object
+      required: [namespace, policies]
+      properties:
+        namespace: { type: string }
+        policies: { type: array, minItems: 1, items: { type: string } }
+    IntegrationIdentityResponse:
+      type: object
+      required: [id, namespace, policies, enabled]
+      properties:
+        id: { type: string }
+        namespace: { type: string }
+        policies: { type: array, items: { type: string } }
+        enabled: { type: boolean }
+        clientSecret: { type: string, format: password, nullable: true, description: Present only once after create or rotate }
+    AdminResourceResponse:
+      type: object
+      properties:
+        namespace: { type: string }
+        name: { type: string }
+        status: { type: string }
+    SecretWriteRequest:
+      type: object
+      required: [data]
+      properties:
+        data: { type: object, minProperties: 1, additionalProperties: true }
+    SecretReadResponse:
+      type: object
+      properties:
+        name: { type: string }
+        data: { type: object, additionalProperties: true }
+        version: { type: integer, format: int64 }
+    SecretWriteResponse:
+      type: object
+      properties:
+        name: { type: string }
+        version: { type: integer, format: int64 }
+    SymmetricKeyRequest:
+      type: object
+      required: [expirationEnabled]
+      properties:
+        expirationEnabled: { type: boolean }
+    SymmetricKeyResponse:
+      type: object
+      required: [alias, algorithm, keyId, key, expirationEnabled]
+      properties:
+        alias: { type: string }
+        algorithm: { type: string, example: HMAC-SHA-256 }
+        keyId: { type: string, example: v1 }
+        key: { type: string, format: byte, description: Base64 HMAC key material; treat as a secret }
+        expirationEnabled: { type: boolean }
+        refreshAt: { type: string, format: date-time, nullable: true }
+        expiresAt: { type: string, format: date-time, nullable: true }
+    KeyPairRequest:
+      type: object
+      required: [type]
+      properties:
+        type: { type: string }
+    KeyResponse:
+      type: object
+      properties:
+        name: { type: string }
+        type: { type: string }
+        keyId: { type: string }
+        publicKey: { type: string }
+        privateKey: { type: string, nullable: true }
+    PolicyResponse:
+      type: object
+      properties:
+        alias: { type: string }
+        enabled: { type: boolean }
+        intervalSeconds: { type: integer, format: int64 }
+        lastRotatedAt: { type: string, format: date-time, nullable: true }
+    RotationPolicyRequest:
+      type: object
+      required: [enabled, intervalSeconds]
+      properties:
+        enabled: { type: boolean }
+        intervalSeconds: { type: integer, format: int64, minimum: 0 }
+    RotationRunResponse:
+      type: object
+      properties:
+        name: { type: string }
+        policyEnabled: { type: boolean }
+        rotated: { type: boolean }
+        activeKeyId: { type: string }
+        status: { type: string }
+    RotationStatusResponse:
+      type: object
+      properties:
+        name: { type: string }
+        keyId: { type: string }
+        state: { type: string }
+    EmergencyRotationRequest:
+      type: object
+      properties:
+        targetAppId: { type: string, nullable: true }
+    PublicKeyEntry:
+      type: object
+      properties:
+        keyId: { type: string }
+        type: { type: string }
+        state: { type: string }
+        createdAt: { type: string, format: date-time }
+        publicKey: { type: string, nullable: true }
+    ApiErrorResponse:
+      type: object
+      required: [timestamp, status, code, message, path, fieldErrors]
+      properties:
+        timestamp: { type: string, format: date-time }
+        status: { type: integer }
+        code: { type: string }
+        message: { type: string }
+        path: { type: string }
+        fieldErrors: { type: object, additionalProperties: { type: string } }

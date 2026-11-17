@@ -1,0 +1,43 @@
+server:
+  port: ${SERVER_PORT:8080}
+  error:
+    include-message: never
+
+spring:
+  application:
+    name: openbao-vault-service
+  cloud:
+    vault:
+      enabled: false # Runtime access is explicitly scoped per application in OpenBaoClient.
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: never
+
+vault-service:
+  openbao:
+    address: ${OPENBAO_ADDR:http://127.0.0.1:8200}
+    kv-mount: ${OPENBAO_KV_MOUNT:secret}
+    transit-mount: ${OPENBAO_TRANSIT_MOUNT:transit}
+    supported-key-types: ${OPENBAO_SUPPORTED_KEY_TYPES:rsa-2048,rsa-3072,rsa-4096,ecdsa-p256,ecdsa-p384,ecdsa-p521,ed25519}
+    admin-token: ${OPENBAO_ADMIN_TOKEN:}
+  symmetric-keys:
+    default-ttl: ${SYMMETRIC_KEY_DEFAULT_TTL:PT720H}
+    renewal-window: ${SYMMETRIC_KEY_RENEWAL_WINDOW:PT24H}
+  iam:
+    signing-secret: ${APP_TOKEN_SIGNING_SECRET}
+    rotation-operator-secret: ${ROTATION_OPERATOR_SECRET:}
+    admin-username: ${ADMIN_USERNAME:}
+    admin-password: ${ADMIN_PASSWORD:}
+    identity-registry-namespace: ${OPENBAO_IDENTITY_REGISTRY_NAMESPACE:}
+    token-ttl: ${APP_TOKEN_TTL:PT15M}
+    apps:
+      demo-app:
+        client-secret: ${APP_ONE_CLIENT_SECRET:}
+        namespace: ${APP_ONE_NAMESPACE:apps/demo-app}
+        openbao-token: ${APP_ONE_OPENBAO_TOKEN:}
