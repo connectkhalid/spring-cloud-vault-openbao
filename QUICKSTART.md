@@ -13,7 +13,7 @@ The local service uses HTTP by default. Use TLS and protected credential storage
 
 ## 1. Provision the demo app
 
-In PowerShell, provision `demo-app`. The temporary operator token is used only by this setup command:
+Go to the project directory and open terminal. Set the location, Openbao's Root Token and run the script. The temporary operator token is used only by this setup command:
 
 ```powershell
 Set-Location 'F:\Projects\spring-cloud-vault'
@@ -54,7 +54,7 @@ $rotationSecret = [Convert]::ToBase64String($rotationBytes)
 [Environment]::SetEnvironmentVariable('ROTATION_OPERATOR_SECRET', $rotationSecret, 'User')
 $env:ROTATION_OPERATOR_SECRET = $rotationSecret
 
-$env:APP_ONE_OPENBAO_TOKEN = '<app token printed by provisioning>'
+$env:APP_ONE_OPENBAO_TOKEN = '<Replace Generated token by provision-openbao-app.ps1 script>'
 $env:APP_ONE_NAMESPACE = 'apps/demo-app'
 Remove-Variable clientSecret, clientBytes, rotationSecret, rotationBytes, bytes
 ```
